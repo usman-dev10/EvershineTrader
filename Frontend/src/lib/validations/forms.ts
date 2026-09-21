@@ -54,4 +54,25 @@ export const machineFormSchema = z.object({
   name: z.string().min(1, "Machine name is required.").max(80),
 });
 
+export const employeeFormSchema = z.object({
+  full_name: z.string().min(2, "Full name must be at least 2 characters.").max(120),
+  email: z.string().optional().default(""),
+  employee_code: z.string().optional().default(""),
+  phone: z.string().optional().nullable(),
+  role_permission: z.string().optional().default("standard"),
+});
+
+export const companyRegisterSchema = z
+  .object({
+    company_name: z.string().min(2, "Company name must be at least 2 characters.").max(120),
+    email: z.string().email("Enter a valid email address."),
+    password: z.string().min(8, "Password must be at least 8 characters."),
+    confirm_password: z.string(),
+  })
+  .refine((data) => data.password === data.confirm_password, {
+    message: "Passwords do not match.",
+    path: ["confirm_password"],
+  });
+
 export type LoginInput = z.infer<typeof loginSchema>;
+export type CompanyRegisterInput = z.infer<typeof companyRegisterSchema>;

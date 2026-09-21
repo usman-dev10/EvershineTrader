@@ -36,6 +36,7 @@ export function ManageCrudPage({
   onCreate,
   onUpdate,
   onDelete,
+  onToggleStatus,
   hideStatus,
   hideSecondary,
   addLabel,
@@ -48,6 +49,7 @@ export function ManageCrudPage({
   onCreate?: (values: Record<string, string>) => Promise<void>;
   onUpdate?: (id: string, values: Record<string, string>) => Promise<void>;
   onDelete?: (id: string) => Promise<void>;
+  onToggleStatus?: (id: string, nextStatus: string) => Promise<void>;
   hideStatus?: boolean;
   hideSecondary?: boolean;
   addLabel?: string;

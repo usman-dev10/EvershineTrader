@@ -79,7 +79,7 @@ export function ManageLivePage({
           });
           await load();
         }}
-        onToggleStatus={async (id, next) => {
+        onToggleStatus={async (id: string, next: string) => {
           await liveApi(`${resourcePath}/${id}`, {
             method: "PATCH",
             body: JSON.stringify({ status: next }),
