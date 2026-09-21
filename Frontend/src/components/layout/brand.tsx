@@ -27,19 +27,19 @@ export function PublicHeader() {
   return (
     <header className="absolute inset-x-0 top-0 z-20">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5 md:px-6">
-        <BrandMark light />
-        <nav className="hidden items-center gap-8 text-sm text-white/80 md:flex">
-          <a href="#how-it-works" className="hover:text-white">
+        <BrandMark />
+        <nav className="hidden items-center gap-8 text-sm font-medium text-slate-600 md:flex">
+          <a href="#how-it-works" className="hover:text-slate-900 transition-colors">
             How it works
           </a>
-          <a href="#why" className="hover:text-white">
+          <a href="#why" className="hover:text-slate-900 transition-colors">
             Floor features
           </a>
         </nav>
         <Link href="/login">
           <Button
             size="sm"
-            className="bg-[#c4a035] text-[#14201b] hover:bg-[#d4b045]"
+            className="bg-slate-900 text-white hover:bg-slate-800 font-medium shadow-sm"
           >
             Login
           </Button>
