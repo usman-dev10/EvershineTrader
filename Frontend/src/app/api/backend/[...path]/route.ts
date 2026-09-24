@@ -40,10 +40,22 @@ async function proxy(request: NextRequest, pathParts: string[]) {
   }
 
   const res = await backendFetch(`/${path}${search}`, init);
-  const payload = await res.json().catch(() => ({
-    data: null,
-    error: { code: "PARSE_ERROR", message: "Invalid backend response." },
-  }));
+  const raw = await res.text();
+  let payload: unknown;
+  try {
+    payload = raw ? JSON.parse(raw) : { data: null, error: null };
+  } catch {
+    payload = {
+      data: null,
+      error: {
+        code: "PARSE_ERROR",
+        message:
+          res.status >= 500
+            ? "Server error while saving. Please try again."
+            : "Invalid backend response.",
+      },
+    };
+  }
   return NextResponse.json(payload, { status: res.status });
 }
 

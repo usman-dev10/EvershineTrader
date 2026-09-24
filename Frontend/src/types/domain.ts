@@ -199,9 +199,12 @@ export interface EmployeeDashboard {
     worker_id: string;
     worker_name: string;
     job_id: string;
-    job_number: string;
+    job_number: string | null;
     job_name: string;
     sheets: number;
+    ups?: number | null;
+    machine_number?: string | null;
+    machine_name?: string | null;
     pile_in_at: string | null;
   }[];
   machine_charts?: {

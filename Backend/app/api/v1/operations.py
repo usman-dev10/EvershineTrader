@@ -15,6 +15,7 @@ from app.schemas.common import CompanyOut, MachineOut, MachineReportJob, Machine
 from app.schemas.operations import (
     DutyBulkUpdate,
     JobCreate,
+    JobDuplicate,
     JobUpdate,
     PileCreate,
     PileOutRequest,
@@ -56,12 +57,7 @@ async def list_shifts(
     service: OpsService = Depends(_ops),
 ):
     rows = await service.shifts.list_shifts(status)
-    out = []
-    for row in rows:
-        item = await service.serialize_shift(row)
-        if item:
-            out.append(item.model_dump(mode="json"))
-    return envelope(data=out)
+    return envelope(data=await service.serialize_shifts(rows))
 
 
 @router.post("/shifts", status_code=201)
@@ -87,6 +83,17 @@ async def update_shift(
     shift = await service.update_shift(shift_id, body)
     data = await service.serialize_shift(shift)
     return envelope(data=data.model_dump(mode="json") if data else None)
+
+
+@router.delete("/shifts/{shift_id}")
+async def delete_shift(
+    shift_id: UUID,
+    auth: AuthContext = Depends(require_roles("employee", "company")),
+    db: AsyncSession = Depends(get_db),
+):
+    service = OpsService(db, auth.company_id, auth.user_id)
+    result = await service.delete_shift(shift_id)
+    return envelope(data=result)
 
 
 @router.get("/shifts/{shift_id}")
@@ -186,7 +193,7 @@ async def list_jobs(
     rows = await service.jobs.list_jobs(
         shift_id=shift_id, machine_id=machine_id, status=status
     )
-    payload = [await service.serialize_job(job) for job in rows]
+    payload = await service.serialize_jobs(rows)
     return envelope(data=payload)
 
 
@@ -224,6 +231,29 @@ async def update_job(
     service = OpsService(db, auth.company_id, auth.user_id)
     job = await service.update_job(job_id, body)
     return envelope(data=await service.serialize_job(job))
+
+
+@router.post("/jobs/{job_id}/duplicate", status_code=201)
+async def duplicate_job(
+    job_id: UUID,
+    body: JobDuplicate,
+    auth: AuthContext = Depends(require_roles("employee")),
+    db: AsyncSession = Depends(get_db),
+):
+    service = OpsService(db, auth.company_id, auth.user_id)
+    job = await service.duplicate_job(job_id, body.shift_id)
+    return envelope(data=await service.serialize_job(job))
+
+
+@router.delete("/jobs/{job_id}")
+async def delete_job(
+    job_id: UUID,
+    auth: AuthContext = Depends(require_roles("employee", "company")),
+    db: AsyncSession = Depends(get_db),
+):
+    service = OpsService(db, auth.company_id, auth.user_id)
+    result = await service.delete_job(job_id)
+    return envelope(data=result)
 
 
 @router.get("/jobs/{job_id}/piles")

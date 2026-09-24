@@ -168,6 +168,16 @@ async def init_db() -> None:
                 """
             )
         )
+        await conn.execute(text("DROP INDEX IF EXISTS uq_jobs_company_job_number"))
+        await conn.execute(
+            text(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS uq_jobs_shift_job_number
+                ON jobs (company_id, shift_id, job_number)
+                WHERE job_number IS NOT NULL AND btrim(job_number) <> ''
+                """
+            )
+        )
 
 
 async def _migrate_sqlite_shifts(conn) -> None:

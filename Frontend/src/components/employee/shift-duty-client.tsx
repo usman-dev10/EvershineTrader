@@ -1,17 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, Td } from "@/components/ui/data-table";
 import { PageHeader } from "@/components/ui/page";
-import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Toggle } from "@/components/ui/toggle";
 import { ToastBanner } from "@/components/ui/feedback";
 import { useToast } from "@/hooks/use-toast";
 import { liveApi } from "@/lib/api/live";
-import type { DutyStatus, Machine, Shift, Worker } from "@/types/domain";
+import type { DutyStatus, Machine, Shift, Supervisor, Worker } from "@/types/domain";
+import {
+  JobsPageClient,
+  type JobListItem,
+} from "@/components/employee/jobs-page-client";
+import {
+  ShiftFormFields,
+  confirmDeleteShift,
+  findSupervisor,
+  nextDay,
+  timeFromIso,
+  toIso,
+  type ShiftCode,
+  type ShiftFormValues,
+} from "@/components/employee/shift-form-fields";
 
 type DutyRow = {
   worker: Worker;
@@ -25,21 +39,12 @@ function formatWhen(iso: string | null | undefined): string {
   return d.toLocaleString();
 }
 
-function toTimeInput(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-function toIsoOnDate(dateStr: string, time: string): string {
-  return new Date(`${dateStr}T${time}:00`).toISOString();
-}
-
 export function ShiftDutyClient({
   shift,
   rows,
   allMachines,
+  jobs,
+  supervisors,
   readOnly,
   onSaved,
   onShiftUpdated,
@@ -47,29 +52,62 @@ export function ShiftDutyClient({
   shift: Shift;
   rows: DutyRow[];
   allMachines: Machine[];
+  jobs: JobListItem[];
+  supervisors: Supervisor[];
   readOnly: boolean;
   onSaved?: () => Promise<void> | void;
   onShiftUpdated?: () => Promise<void> | void;
 }) {
+  const router = useRouter();
   const { toast, show } = useToast();
   const [duty, setDuty] = useState<Record<string, DutyStatus>>({});
   const [pending, setPending] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
-  const [startTime, setStartTime] = useState(toTimeInput(shift.start_time));
-  const [endTime, setEndTime] = useState(toTimeInput(shift.end_time));
-  const [machineIds, setMachineIds] = useState(
-    (shift.machines ?? []).map((m) => m.id),
+  const [shiftCode, setShiftCode] = useState<ShiftCode>(
+    shift.name === "B" ? "B" : "A",
   );
+  const [form, setForm] = useState<ShiftFormValues>({
+    shift_date: shift.shift_date,
+    start_time: timeFromIso(shift.start_time),
+    end_time: timeFromIso(shift.end_time),
+    supervisor_id: shift.supervisor_id ?? "",
+    machine_ids: (shift.machines ?? []).map((m) => m.id),
+  });
 
   useEffect(() => {
     setDuty(Object.fromEntries(rows.map((r) => [r.worker.id, r.duty_status])));
   }, [rows]);
 
   useEffect(() => {
-    setStartTime(toTimeInput(shift.start_time));
-    setEndTime(toTimeInput(shift.end_time));
-    setMachineIds((shift.machines ?? []).map((m) => m.id));
+    setShiftCode(shift.name === "B" ? "B" : "A");
+    setForm({
+      shift_date: shift.shift_date,
+      start_time: timeFromIso(shift.start_time),
+      end_time: timeFromIso(shift.end_time),
+      supervisor_id: shift.supervisor_id ?? "",
+      machine_ids: (shift.machines ?? []).map((m) => m.id),
+    });
   }, [shift]);
+
+  const imranId = useMemo(
+    () => findSupervisor(supervisors, "Imran"),
+    [supervisors],
+  );
+  const sulemanId = useMemo(
+    () => findSupervisor(supervisors, "Suleman"),
+    [supervisors],
+  );
+
+  function onShiftCode(code: ShiftCode) {
+    setShiftCode(code);
+    setForm((prev) => ({
+      ...prev,
+      start_time: code === "A" ? "08:00" : "20:00",
+      end_time: code === "A" ? "20:00" : "08:00",
+      supervisor_id:
+        (code === "A" ? imranId : sulemanId) || prev.supervisor_id,
+    }));
+  }
 
   async function saveDuty() {
     setPending(true);
@@ -110,25 +148,44 @@ export function ShiftDutyClient({
     }
   }
 
+  async function deleteShift() {
+    if (!confirmDeleteShift(shift)) return;
+    setPending(true);
+    try {
+      await liveApi(`/shifts/${shift.id}`, { method: "DELETE" });
+      show("success", "Shift deleted.");
+      router.push("/employee/shifts");
+    } catch (err) {
+      show("error", err instanceof Error ? err.message : "Unable to delete shift.");
+    } finally {
+      setPending(false);
+    }
+  }
+
   async function saveEdit() {
-    if (!startTime || !endTime) {
-      show("error", "Enter start and end time.");
+    if (!form.shift_date || !form.start_time || !form.end_time || !form.supervisor_id) {
+      show("error", "Please complete all required fields.");
+      return;
+    }
+    if (form.machine_ids.length === 0) {
+      show("error", "Select at least one machine for this shift.");
       return;
     }
     setPending(true);
     try {
-      let endDate = shift.shift_date;
-      if (shift.name === "B" && endTime <= startTime) {
-        const d = new Date(`${shift.shift_date}T12:00:00`);
-        d.setDate(d.getDate() + 1);
-        endDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-      }
+      const endDate =
+        shiftCode === "B" && form.end_time <= form.start_time
+          ? nextDay(form.shift_date)
+          : form.shift_date;
       await liveApi(`/shifts/${shift.id}`, {
         method: "PATCH",
         body: JSON.stringify({
-          start_time: toIsoOnDate(shift.shift_date, startTime),
-          end_time: toIsoOnDate(endDate, endTime),
-          machine_ids: machineIds,
+          name: shiftCode,
+          shift_date: form.shift_date,
+          start_time: toIso(form.shift_date, form.start_time),
+          end_time: toIso(endDate, form.end_time),
+          supervisor_id: form.supervisor_id,
+          machine_ids: form.machine_ids,
         }),
       });
       show("success", "Shift updated.");
@@ -148,29 +205,50 @@ export function ShiftDutyClient({
           .join(", ")
       : "None selected";
 
+  const jobMachines =
+    (shift.machines ?? []).length > 0 ? (shift.machines ?? []) : allMachines;
+
   return (
     <>
       <PageHeader
         title={`Shift ${shift.name}`}
-        description="Shift details, machines, and worker duty."
+        description="Shift details, jobs, machines, and worker duty."
         actions={
-          !readOnly ? (
-            <>
-              <Button variant="secondary" onClick={() => setEditOpen(true)}>
-                Edit
-              </Button>
-              <Button variant="danger" onClick={closeShift} disabled={pending}>
-                Closed
-              </Button>
-              <Button onClick={saveDuty} disabled={pending}>
-                {pending ? "Saving…" : "Save duty"}
-              </Button>
-            </>
-          ) : (
-            <Badge tone="neutral">Closed · read-only</Badge>
-          )
+          <>
+            <Button variant="secondary" onClick={() => setEditOpen(true)}>
+              Edit
+            </Button>
+            <Button variant="danger" onClick={() => void deleteShift()} disabled={pending}>
+              Delete
+            </Button>
+            {!readOnly ? (
+              <>
+                <Button variant="danger" onClick={closeShift} disabled={pending}>
+                  Closed
+                </Button>
+                <Button onClick={saveDuty} disabled={pending}>
+                  {pending ? "Saving…" : "Save duty"}
+                </Button>
+              </>
+            ) : (
+              <Badge tone="neutral">Closed · duty read-only</Badge>
+            )}
+          </>
         }
       />
+
+      <section className="mb-6 rounded-2xl border border-[var(--line)] bg-white p-5">
+        <JobsPageClient
+          jobs={jobs}
+          machines={jobMachines}
+          hasOpenShift
+          canCreate
+          basePath="/employee/jobs"
+          targetShiftId={shift.id}
+          embedded
+          onCreated={onShiftUpdated}
+        />
+      </section>
 
       <section className="mb-6 rounded-2xl border border-[var(--line)] bg-white p-5">
         <div className="flex flex-wrap items-center gap-3">
@@ -264,58 +342,28 @@ export function ShiftDutyClient({
 
       <Modal
         open={editOpen}
-        title="Edit shift time"
+        title="Edit shift"
         onClose={() => setEditOpen(false)}
+        onSubmit={saveEdit}
         footer={
           <>
             <Button variant="secondary" onClick={() => setEditOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={saveEdit} disabled={pending}>
+            <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save"}
             </Button>
           </>
         }
       >
-        <p className="text-sm text-[var(--muted)]">
-          Original: {formatWhen(shift.original_start_time)} →{" "}
-          {formatWhen(shift.original_end_time)}
-        </p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            label="Start time"
-            name="start_time"
-            type="time"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
-          />
-          <Input
-            label="End time"
-            name="end_time"
-            type="time"
-            value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-          />
-        </div>
-        <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
-          <p className="text-sm font-medium">Machine number</p>
-          {allMachines.map((m) => (
-            <label key={m.id} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={machineIds.includes(m.id)}
-                onChange={() =>
-                  setMachineIds((prev) =>
-                    prev.includes(m.id)
-                      ? prev.filter((id) => id !== m.id)
-                      : [...prev, m.id],
-                  )
-                }
-              />
-              {m.machine_number} · {m.name}
-            </label>
-          ))}
-        </div>
+        <ShiftFormFields
+          shiftCode={shiftCode}
+          onShiftCode={onShiftCode}
+          form={form}
+          setForm={setForm}
+          supervisors={supervisors}
+          machines={allMachines}
+        />
       </Modal>
       <ToastBanner toast={toast} />
     </>

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { usePathname } from "next/navigation";
 import { EmployeeShell } from "@/components/layout/employee-shell";
 import { liveApi } from "@/lib/api/live";
 import type { Shift } from "@/types/domain";
@@ -10,17 +11,30 @@ export default function EmployeeLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
   const [currentShift, setCurrentShift] = useState<Shift | null>(null);
+  const [shiftReady, setShiftReady] = useState(false);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        setCurrentShift(await liveApi<Shift | null>("/shifts/current"));
-      } catch {
-        setCurrentShift(null);
-      }
-    })();
+  const loadCurrent = useCallback(async () => {
+    try {
+      const shift = await liveApi<Shift | null>("/shifts/current", {
+        loader: false,
+      });
+      setCurrentShift(shift ?? null);
+    } catch {
+      setCurrentShift(null);
+    } finally {
+      setShiftReady(true);
+    }
   }, []);
 
-  return <EmployeeShell currentShift={currentShift}>{children}</EmployeeShell>;
+  useEffect(() => {
+    void loadCurrent();
+  }, [loadCurrent, pathname]);
+
+  return (
+    <EmployeeShell currentShift={currentShift} shiftReady={shiftReady}>
+      {children}
+    </EmployeeShell>
+  );
 }

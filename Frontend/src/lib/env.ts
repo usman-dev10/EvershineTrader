@@ -21,14 +21,15 @@ export function getPublicEnv(): PublicEnv {
   });
 
   if (!parsed.success) {
-    if (process.env.NODE_ENV === "development") {
-      return {
-        NEXT_PUBLIC_SUPABASE_URL: "https://placeholder.supabase.co",
-        NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder-anon-key-min-20-chars",
-        NEXT_PUBLIC_API_BASE_URL: "http://localhost:8000/api/v1",
-      };
-    }
-    throw new Error("Invalid public environment configuration.");
+    return {
+      NEXT_PUBLIC_SUPABASE_URL:
+        process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY:
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+        "placeholder-anon-key-min-20-chars",
+      NEXT_PUBLIC_API_BASE_URL:
+        process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000/api/v1",
+    };
   }
 
   cached = parsed.data;

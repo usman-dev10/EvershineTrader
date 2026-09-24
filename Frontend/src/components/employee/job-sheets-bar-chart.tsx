@@ -82,10 +82,10 @@ export function JobSheetsBarChart({ data }: { data: JobSheetBar[] }) {
               </div>
               <div className="relative flex h-48 items-end gap-2 px-1 pt-4 sm:h-56 sm:gap-4">
                 {data.map((item) => {
-                  const totalH = Math.max(
-                    2,
-                    (item.total_sheets / maxSheets) * 100,
-                  );
+                  const hasTotal = item.total_sheets > 0;
+                  const totalH = hasTotal
+                    ? Math.max(2, (item.total_sheets / maxSheets) * 100)
+                    : 0;
                   const breakH = Math.max(
                     2,
                     (item.break_sheets / maxSheets) * 100,
@@ -94,24 +94,32 @@ export function JobSheetsBarChart({ data }: { data: JobSheetBar[] }) {
                     <div
                       key={item.job_id}
                       className="flex h-full min-w-[48px] flex-1 flex-col items-center justify-end sm:min-w-[64px]"
-                      title={`${item.job_number}: total ${formatNumber(item.total_sheets)}, break ${formatNumber(item.break_sheets)}`}
+                      title={
+                        hasTotal
+                          ? `${item.job_number}: total ${formatNumber(item.total_sheets)}, break ${formatNumber(item.break_sheets)}`
+                          : `${item.job_number}: unlimited total, break ${formatNumber(item.break_sheets)}`
+                      }
                     >
                       <div className="flex h-full w-full max-w-[72px] items-end justify-center gap-1">
-                        <div className="relative flex h-full w-[42%] flex-col justify-end">
-                          <div
-                            className="relative w-full rounded-t-sm ring-1 ring-[var(--ink)]/15"
-                            style={{
-                              height: `${totalH}%`,
-                              minHeight: 4,
-                              background: COLOR_TOTAL,
-                            }}
-                          >
-                            <span className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-semibold leading-none text-[var(--ink)]">
-                              {formatNumber(item.total_sheets)}
-                            </span>
+                        {hasTotal ? (
+                          <div className="relative flex h-full w-[42%] flex-col justify-end">
+                            <div
+                              className="relative w-full rounded-t-sm ring-1 ring-[var(--ink)]/15"
+                              style={{
+                                height: `${totalH}%`,
+                                minHeight: 4,
+                                background: COLOR_TOTAL,
+                              }}
+                            >
+                              <span className="absolute -top-4 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-semibold leading-none text-[var(--ink)]">
+                                {formatNumber(item.total_sheets)}
+                              </span>
+                            </div>
                           </div>
-                        </div>
-                        <div className="relative flex h-full w-[42%] flex-col justify-end">
+                        ) : null}
+                        <div
+                          className={`relative flex h-full flex-col justify-end ${hasTotal ? "w-[42%]" : "w-[55%]"}`}
+                        >
                           <div
                             className="relative w-full rounded-t-sm ring-1 ring-[var(--ink)]/15"
                             style={{

@@ -17,8 +17,11 @@ class ShiftCreate(BaseModel):
 
 
 class ShiftUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=80)
+    shift_date: date | None = None
     start_time: datetime
     end_time: datetime
+    supervisor_id: UUID | None = None
     machine_ids: list[UUID] | None = None
 
 
@@ -51,10 +54,15 @@ class DutyBulkUpdate(BaseModel):
 class JobCreate(BaseModel):
     job_name: str = Field(min_length=1, max_length=120)
     machine_id: UUID
+    shift_id: UUID | None = None
     job_number: str | None = Field(default=None, max_length=60)
     total_sheets: int | None = Field(default=None, ge=0)
     dabbi: bool
     ups: int = Field(ge=0)
+
+
+class JobDuplicate(BaseModel):
+    shift_id: UUID
 
 
 class JobUpdate(BaseModel):

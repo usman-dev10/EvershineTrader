@@ -10,15 +10,18 @@ export default function EmployeeDashboardPage() {
   const [data, setData] = useState<EmployeeDashboard | undefined>();
   const [error, setError] = useState<string | null>(null);
 
+  async function load() {
+    setError(null);
+    try {
+      const dashboard = await liveApi<EmployeeDashboard>("/dashboard/employee");
+      setData(dashboard);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unable to load dashboard.");
+    }
+  }
+
   useEffect(() => {
-    void (async () => {
-      try {
-        const dashboard = await liveApi<EmployeeDashboard>("/dashboard/employee");
-        setData(dashboard);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : "Unable to load dashboard.");
-      }
-    })();
+    void load();
   }, []);
 
   return (
@@ -28,7 +31,7 @@ export default function EmployeeDashboardPage() {
           <AlertBanner tone="warning">{error}</AlertBanner>
         </div>
       ) : null}
-      <EmployeeDashboardView data={data} />
+      <EmployeeDashboardView data={data} onRefresh={load} />
     </>
   );
 }

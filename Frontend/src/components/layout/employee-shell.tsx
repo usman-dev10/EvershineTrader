@@ -15,16 +15,22 @@ const employeeLinks = [
 export function EmployeeShell({
   children,
   currentShift,
+  shiftReady = true,
 }: {
   children: React.ReactNode;
   currentShift: Shift | null;
+  shiftReady?: boolean;
 }) {
   return (
     <div className="flex min-h-screen flex-col bg-[var(--surface)] lg:flex-row">
       <AppSidebar
         links={employeeLinks}
         footer={
-          currentShift ? (
+          !shiftReady ? (
+            <Badge tone="neutral" className="w-full justify-center">
+              Checking shift…
+            </Badge>
+          ) : currentShift ? (
             <Badge tone="success" className="w-full justify-center">
               {currentShift.name} · Open
             </Badge>
@@ -36,7 +42,7 @@ export function EmployeeShell({
         }
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        {currentShift ? (
+        {!shiftReady ? null : currentShift ? (
           <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-950 md:px-6 lg:px-8">
             Working under <strong>{currentShift.name}</strong> · {currentShift.shift_date}{" "}
             <Link

@@ -6,35 +6,21 @@ import { Badge, statusTone } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable, Td } from "@/components/ui/data-table";
 import { EmptyState, PageHeader } from "@/components/ui/page";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { Modal } from "@/components/ui/modal";
 import { ToastBanner } from "@/components/ui/feedback";
 import { useToast } from "@/hooks/use-toast";
 import { liveApi } from "@/lib/api/live";
 import type { Machine, Shift, Supervisor } from "@/types/domain";
-
-function todayLocal(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function nextDay(dateStr: string): string {
-  const d = new Date(`${dateStr}T12:00:00`);
-  d.setDate(d.getDate() + 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
-
-function toIso(date: string, time: string): string {
-  return new Date(`${date}T${time}:00`).toISOString();
-}
-
-function findSupervisor(supervisors: Supervisor[], name: string): string {
-  const found = supervisors.find(
-    (s) => s.name.toLowerCase() === name.toLowerCase() && s.status === "active",
-  );
-  return found?.id ?? "";
-}
+import {
+  ShiftFormFields,
+  confirmDeleteShift,
+  findSupervisor,
+  nextDay,
+  todayLocal,
+  toIso,
+  type ShiftCode,
+  type ShiftFormValues,
+} from "@/components/employee/shift-form-fields";
 
 export function ShiftsPageClient({
   shifts,
@@ -55,24 +41,31 @@ export function ShiftsPageClient({
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
   const [closingId, setClosingId] = useState<string | null>(null);
-  const [shiftCode, setShiftCode] = useState<"A" | "B">("A");
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [shiftCode, setShiftCode] = useState<ShiftCode>("A");
   const [supervisorList, setSupervisorList] = useState(supervisors);
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<ShiftFormValues>({
     shift_date: todayLocal(),
     start_time: "08:00",
     end_time: "20:00",
     supervisor_id: "",
-    machine_ids: [] as string[],
+    machine_ids: [],
   });
 
   useEffect(() => {
     setSupervisorList(supervisors);
   }, [supervisors]);
 
-  const imranId = useMemo(() => findSupervisor(supervisorList, "Imran"), [supervisorList]);
-  const sulemanId = useMemo(() => findSupervisor(supervisorList, "Suleman"), [supervisorList]);
+  const imranId = useMemo(
+    () => findSupervisor(supervisorList, "Imran"),
+    [supervisorList],
+  );
+  const sulemanId = useMemo(
+    () => findSupervisor(supervisorList, "Suleman"),
+    [supervisorList],
+  );
 
-  function applyShiftDefaults(code: "A" | "B") {
+  function applyShiftDefaults(code: ShiftCode) {
     const date = todayLocal();
     if (code === "A") {
       setForm((prev) => ({
@@ -131,15 +124,6 @@ export function ShiftsPageClient({
       machine_ids: [],
     });
     setOpen(true);
-  }
-
-  function toggleMachine(id: string) {
-    setForm((prev) => ({
-      ...prev,
-      machine_ids: prev.machine_ids.includes(id)
-        ? prev.machine_ids.filter((x) => x !== id)
-        : [...prev.machine_ids, id],
-    }));
   }
 
   async function submit() {
@@ -204,6 +188,20 @@ export function ShiftsPageClient({
     }
   }
 
+  async function deleteShift(shift: Shift) {
+    if (!confirmDeleteShift(shift)) return;
+    setDeletingId(shift.id);
+    try {
+      await liveApi(`/shifts/${shift.id}`, { method: "DELETE" });
+      show("success", "Shift deleted.");
+      await onCreated?.();
+    } catch (err) {
+      show("error", err instanceof Error ? err.message : "Unable to delete shift.");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -239,6 +237,19 @@ export function ShiftsPageClient({
               </Td>
               <Td>
                 <div className="flex flex-wrap gap-2">
+                  <Link href={`/employee/shifts/${shift.id}`}>
+                    <Button size="sm" variant="secondary">
+                      Detail
+                    </Button>
+                  </Link>
+                  <Button
+                    size="sm"
+                    variant="danger"
+                    disabled={deletingId === shift.id}
+                    onClick={() => void deleteShift(shift)}
+                  >
+                    {deletingId === shift.id ? "Deleting…" : "Delete"}
+                  </Button>
                   {shift.status === "open" ? (
                     <Button
                       size="sm"
@@ -248,19 +259,6 @@ export function ShiftsPageClient({
                     >
                       {closingId === shift.id ? "Closing…" : "Closed"}
                     </Button>
-                  ) : (
-                    <Link href={`/employee/shifts/${shift.id}`}>
-                      <Button size="sm" variant="secondary">
-                        Open
-                      </Button>
-                    </Link>
-                  )}
-                  {shift.status === "open" ? (
-                    <Link href={`/employee/shifts/${shift.id}`}>
-                      <Button size="sm" variant="secondary">
-                        Details
-                      </Button>
-                    </Link>
                   ) : null}
                 </div>
               </Td>
@@ -273,88 +271,29 @@ export function ShiftsPageClient({
         open={open}
         title="Open shift"
         onClose={() => setOpen(false)}
+        onSubmit={submit}
         footer={
           <>
             <Button variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={submit} disabled={pending}>
+            <Button type="submit" disabled={pending}>
               {pending ? "Opening…" : "Open shift"}
             </Button>
           </>
         }
       >
-        <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
-          <p className="text-sm font-medium">Shift</p>
-          <div className="flex gap-4">
-            {(["A", "B"] as const).map((code) => (
-              <label key={code} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={shiftCode === code}
-                  onChange={() => {
-                    setShiftCode(code);
-                    applyShiftDefaults(code);
-                  }}
-                />
-                {code}
-              </label>
-            ))}
-          </div>
-        </div>
-
-        <Input
-          label="Date"
-          name="shift_date"
-          type="date"
-          value={form.shift_date}
-          onChange={(e) => setForm({ ...form, shift_date: e.target.value })}
+        <ShiftFormFields
+          shiftCode={shiftCode}
+          onShiftCode={(code) => {
+            setShiftCode(code);
+            applyShiftDefaults(code);
+          }}
+          form={form}
+          setForm={setForm}
+          supervisors={supervisorList}
+          machines={machines}
         />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            label="Start time"
-            name="start_time"
-            type="time"
-            value={form.start_time}
-            onChange={(e) => setForm({ ...form, start_time: e.target.value })}
-          />
-          <Input
-            label="End time"
-            name="end_time"
-            type="time"
-            value={form.end_time}
-            onChange={(e) => setForm({ ...form, end_time: e.target.value })}
-          />
-        </div>
-        <Select
-          label="Supervisor"
-          name="supervisor_id"
-          value={form.supervisor_id}
-          onChange={(e) => setForm({ ...form, supervisor_id: e.target.value })}
-          options={supervisorList
-            .filter((s) => ["Imran", "Suleman"].includes(s.name))
-            .map((s) => ({ value: s.id, label: s.name }))}
-        />
-
-        <div className="space-y-2 rounded-lg border border-[var(--line)] p-3">
-          <p className="text-sm font-medium">Machine number</p>
-          {machines.length === 0 ? (
-            <p className="text-xs text-[var(--muted)]">
-              No machines yet. Add machines from company Manage first.
-            </p>
-          ) : (
-            machines.map((m) => (
-              <label key={m.id} className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.machine_ids.includes(m.id)}
-                  onChange={() => toggleMachine(m.id)}
-                />
-                {m.machine_number} · {m.name}
-              </label>
-            ))
-          )}
-        </div>
       </Modal>
       <ToastBanner toast={toast} />
     </>

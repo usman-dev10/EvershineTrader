@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ShiftDutyClient } from "@/components/employee/shift-duty-client";
+import type { JobListItem } from "@/components/employee/jobs-page-client";
 import { AlertBanner } from "@/components/ui/feedback";
 import { Button } from "@/components/ui/button";
 import { liveApi } from "@/lib/api/live";
-import type { DutyStatus, Machine, Shift, Worker } from "@/types/domain";
+import type { DutyStatus, Machine, Shift, Supervisor, Worker } from "@/types/domain";
 
 type DutyRow = { worker: Worker; duty_status: DutyStatus };
 
@@ -24,6 +25,8 @@ export default function EmployeeShiftDetailPage() {
   const [shift, setShift] = useState<Shift | null>(null);
   const [rows, setRows] = useState<DutyRow[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
+  const [jobs, setJobs] = useState<JobListItem[]>([]);
+  const [supervisors, setSupervisors] = useState<Supervisor[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -36,14 +39,20 @@ export default function EmployeeShiftDetailPage() {
       const found = await liveApi<Shift>(`/shifts/${shiftId}`);
       setShift(found);
 
-      const [workers, duty, machineList] = await Promise.all([
+      const [workers, duty, machineList, jobList, floorSupers] = await Promise.all([
         liveApi<Worker[]>("/workers?status=active").catch(() => [] as Worker[]),
         liveApi<{ worker_id: string; duty_status: DutyStatus }[]>(
           `/shifts/${shiftId}/workers`,
         ).catch(() => []),
         liveApi<Machine[]>("/machines").catch(() => [] as Machine[]),
+        liveApi<JobListItem[]>(`/jobs?shift_id=${shiftId}`).catch(
+          () => [] as JobListItem[],
+        ),
+        liveApi<Supervisor[]>("/floor/supervisors").catch(() => [] as Supervisor[]),
       ]);
       setMachines(machineList);
+      setJobs(jobList);
+      setSupervisors(floorSupers);
       const dutyMap = new Map(duty.map((d) => [d.worker_id, d.duty_status]));
       setRows(
         workers.map((worker) => ({
@@ -82,6 +91,8 @@ export default function EmployeeShiftDetailPage() {
       shift={shift}
       rows={rows}
       allMachines={machines}
+      jobs={jobs}
+      supervisors={supervisors}
       readOnly={shift.status === "closed"}
       onSaved={load}
       onShiftUpdated={load}

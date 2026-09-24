@@ -1,8 +1,16 @@
 "use client";
 
+import { beginPageLoad, endPageLoad } from "@/lib/page-load-bus";
+import { captionForApi } from "@/lib/page-caption";
+
 export type ApiEnvelope<T> = {
   data: T;
   error: { code: string; message: string } | null;
+};
+
+export type LiveInit = RequestInit & {
+  /** Default true. Shell/background fetches should pass false. */
+  loader?: boolean;
 };
 
 function messageFromPayload(payload: unknown, status: number): string {
@@ -28,32 +36,52 @@ function messageFromPayload(payload: unknown, status: number): string {
 
 export async function liveApi<T>(
   path: string,
-  init: RequestInit = {},
+  init: LiveInit = {},
 ): Promise<T> {
-  const res = await fetch(`/api/backend${path.startsWith("/") ? path : `/${path}`}`, {
-    ...init,
-    headers: {
-      Accept: "application/json",
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-      ...init.headers,
-    },
-    cache: "no-store",
-  });
+  const { loader, ...rest } = init;
+  const method = (rest.method ?? "GET").toUpperCase();
+  const track = loader !== false;
+  if (track) {
+    beginPageLoad(captionForApi(method, path));
+  }
 
-  let payload: unknown = null;
   try {
-    payload = await res.json();
-  } catch {
-    throw new Error(
-      res.status === 401
-        ? "API session missing. Start FastAPI and log in again."
-        : `Request failed (${res.status}).`,
+    const res = await fetch(
+      `/api/backend${path.startsWith("/") ? path : `/${path}`}`,
+      {
+        ...rest,
+        headers: {
+          Accept: "application/json",
+          ...(rest.body ? { "Content-Type": "application/json" } : {}),
+          ...rest.headers,
+        },
+        cache: "no-store",
+      },
     );
-  }
 
-  const envelope = payload as ApiEnvelope<T>;
-  if (!res.ok || envelope.error) {
-    throw new Error(messageFromPayload(payload, res.status));
+    let payload: unknown = null;
+    try {
+      payload = await res.json();
+    } catch {
+      throw new Error(
+        res.status === 401
+          ? "API session missing. Start FastAPI and log in again."
+          : `Request failed (${res.status}).`,
+      );
+    }
+
+    const envelope = payload as ApiEnvelope<T>;
+    if (!res.ok || envelope.error) {
+      throw new Error(messageFromPayload(payload, res.status));
+    }
+    return envelope.data;
+  } finally {
+    if (track) {
+      if (method === "GET" || method === "HEAD") {
+        endPageLoad();
+      } else {
+        window.setTimeout(() => endPageLoad(), 0);
+      }
+    }
   }
-  return envelope.data;
 }

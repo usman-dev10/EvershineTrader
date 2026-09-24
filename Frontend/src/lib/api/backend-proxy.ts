@@ -36,5 +36,19 @@ export async function backendFetch(
     headers.set("Content-Type", "application/json");
   }
 
-  return fetch(url, { ...init, headers, cache: "no-store" });
+  try {
+    return await fetch(url, { ...init, headers, cache: "no-store" });
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : "Network error";
+    return new Response(
+      JSON.stringify({
+        data: null,
+        error: {
+          code: "BACKEND_OFFLINE",
+          message: `Unable to reach backend API (${errorMsg}).`,
+        },
+      }),
+      { status: 503, headers: { "Content-Type": "application/json" } },
+    );
+  }
 }

@@ -1,11 +1,16 @@
+"use client";
+
+import { useState } from "react";
 import type { EmployeeDashboard } from "@/types/domain";
 import { MetricCard, PageHeader } from "@/components/ui/page";
-import { AlertBanner } from "@/components/ui/feedback";
+import { AlertBanner, ToastBanner } from "@/components/ui/feedback";
 import { Badge } from "@/components/ui/badge";
 import { JobSheetsBarChart } from "@/components/employee/job-sheets-bar-chart";
 import { formatNumber } from "@/lib/utils";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { liveApi } from "@/lib/api/live";
+import { useToast } from "@/hooks/use-toast";
 
 const empty: EmployeeDashboard = {
   current_shift: null,
@@ -27,6 +32,7 @@ function formatPileInTime(iso: string | null): string {
     return new Date(iso).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
+      second: "2-digit",
     });
   } catch {
     return iso.slice(11, 16) || "—";
@@ -34,12 +40,53 @@ function formatPileInTime(iso: string | null): string {
 }
 
 export function EmployeeDashboardView({
-  data = empty,
+  data,
+  onRefresh,
 }: {
   data?: EmployeeDashboard;
+  onRefresh?: () => Promise<void> | void;
 }) {
-  const previousYellow = data.previous_yellow_jobs ?? [];
-  const workersIn = data.workers_pile_in ?? [];
+  const loaded = Boolean(data);
+  const current = data ?? empty;
+  const previousYellow = current.previous_yellow_jobs ?? [];
+  const workersIn = current.workers_pile_in ?? [];
+  const { toast, show } = useToast();
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+
+  async function pileOut(jobId: string, workerId: string) {
+    const key = `${jobId}-${workerId}-out`;
+    setBusyKey(key);
+    try {
+      await liveApi(`/jobs/${jobId}/workers/${workerId}/pile-out`, {
+        method: "POST",
+        body: JSON.stringify({ pile_out_at: new Date().toISOString() }),
+      });
+      show("success", "Pile Out recorded.");
+      await onRefresh?.();
+    } catch (err) {
+      show("error", err instanceof Error ? err.message : "Unable to complete pile.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  async function pileCancel(jobId: string, workerId: string, workerName: string) {
+    const ok = window.confirm(`Cancel pile IN for ${workerName}? This pile will be removed.`);
+    if (!ok) return;
+    const key = `${jobId}-${workerId}-cancel`;
+    setBusyKey(key);
+    try {
+      await liveApi(`/jobs/${jobId}/workers/${workerId}/pile-cancel`, {
+        method: "POST",
+      });
+      show("success", "Pile In cancelled.");
+      await onRefresh?.();
+    } catch (err) {
+      show("error", err instanceof Error ? err.message : "Unable to cancel.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
 
   return (
     <>
@@ -58,7 +105,7 @@ export function EmployeeDashboardView({
         }
       />
 
-      {!data.current_shift ? (
+      {loaded && !current.current_shift ? (
         <div className="mb-6">
           <AlertBanner tone="warning">
             No shift is currently open. Open a shift before creating jobs or adding piles.
@@ -69,18 +116,18 @@ export function EmployeeDashboardView({
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <MetricCard
           label="Current shift"
-          value={data.current_shift?.name ?? "—"}
-          hint={data.current_shift?.shift_date}
+          value={current.current_shift?.name ?? "—"}
+          hint={current.current_shift?.shift_date}
         />
         <MetricCard
           label="Workers on duty"
-          value={data.workers_on}
-          hint={`${data.workers_off} off`}
+          value={current.workers_on}
+          hint={`${current.workers_off} off`}
         />
-        <MetricCard label="Open jobs" value={data.open_jobs} />
+        <MetricCard label="Open jobs" value={current.open_jobs} />
         <MetricCard
           label="Machines"
-          value={data.total_machines}
+          value={current.total_machines}
           hint="Running on open shift"
         />
       </div>
@@ -139,7 +186,7 @@ export function EmployeeDashboardView({
               Workers with pile IN
             </h2>
             <p className="text-sm text-[var(--muted)]">
-              Currently working — pile started, not yet Out
+              Active pile IN — Out or Cancel here. New pile IN stays on Sheets.
             </p>
           </div>
           <Badge tone={workersIn.length ? "success" : "neutral"}>
@@ -152,34 +199,96 @@ export function EmployeeDashboardView({
           </p>
         ) : (
           <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
-            {workersIn.map((row) => (
-              <li
-                key={`${row.worker_id}-${row.job_id}-${row.pile_in_at ?? ""}`}
-                className="flex min-w-0 flex-col gap-1 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <p className="truncate font-medium text-[var(--ink)]">
-                    {row.worker_name}
-                  </p>
-                  <Badge tone="success">IN</Badge>
-                </div>
-                <p className="truncate text-sm text-[var(--muted)]">
-                  {row.job_number}
-                  {row.job_name && row.job_name !== row.job_number
-                    ? ` · ${row.job_name}`
-                    : ""}
-                </p>
-                <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--muted)]">
-                  <span>{formatNumber(row.sheets)} sheets</span>
-                  <span>In {formatPileInTime(row.pile_in_at)}</span>
-                </div>
-              </li>
-            ))}
+            {workersIn.map((row) => {
+              const rowKey = `${row.worker_id}-${row.job_id}`;
+              const machine =
+                row.machine_number || row.machine_name
+                  ? `${row.machine_number ?? ""} · ${row.machine_name ?? ""}`.replace(
+                      /^ · | · $/g,
+                      "",
+                    )
+                  : "—";
+              return (
+                <li
+                  key={`${rowKey}-${row.pile_in_at ?? ""}`}
+                  className="flex min-w-0 flex-col gap-2 rounded-xl border border-[var(--line)] bg-[var(--surface)] p-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate font-medium text-[var(--ink)]">
+                      {row.worker_name}
+                    </p>
+                    <Badge tone="success">IN</Badge>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    <div className="col-span-2">
+                      <dt className="text-[var(--muted)]">Job name</dt>
+                      <dd className="truncate font-medium text-[var(--ink)]">
+                        {row.job_name}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--muted)]">Job no</dt>
+                      <dd className="font-medium text-[var(--ink)]">
+                        {row.job_number?.trim() ? row.job_number : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--muted)]">UPS</dt>
+                      <dd className="font-medium text-[var(--ink)]">
+                        {row.ups != null ? formatNumber(row.ups) : "—"}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--muted)]">Break sheets</dt>
+                      <dd className="font-medium text-[var(--ink)]">
+                        {formatNumber(row.sheets)}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt className="text-[var(--muted)]">Time</dt>
+                      <dd className="font-medium text-[var(--ink)]">
+                        {formatPileInTime(row.pile_in_at)}
+                      </dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-[var(--muted)]">Machine</dt>
+                      <dd className="truncate font-medium text-[var(--ink)]">
+                        {machine}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <Button
+                      size="sm"
+                      disabled={busyKey !== null}
+                      onClick={() => void pileOut(row.job_id, row.worker_id)}
+                    >
+                      {busyKey === `${row.job_id}-${row.worker_id}-out`
+                        ? "Saving…"
+                        : "Out"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={busyKey !== null}
+                      onClick={() =>
+                        void pileCancel(row.job_id, row.worker_id, row.worker_name)
+                      }
+                    >
+                      {busyKey === `${row.job_id}-${row.worker_id}-cancel`
+                        ? "Cancelling…"
+                        : "Cancel"}
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </section>
 
-      <JobSheetsBarChart data={data.job_sheet_bars ?? []} />
+      <JobSheetsBarChart data={current.job_sheet_bars ?? []} />
+      <ToastBanner toast={toast} />
     </>
   );
 }

@@ -204,6 +204,7 @@ export default function EmployeesManagePage() {
           setMode(null);
           setEditId(null);
         }}
+        onSubmit={submit}
         footer={
           <>
             <Button
@@ -215,7 +216,7 @@ export default function EmployeesManagePage() {
             >
               Cancel
             </Button>
-            <Button onClick={submit} disabled={pending}>
+            <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save"}
             </Button>
           </>

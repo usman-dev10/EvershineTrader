@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { scrollFieldIntoView } from "@/components/system/keyboard-inset";
 import type { InputHTMLAttributes } from "react";
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -17,12 +18,18 @@ export function Input({
   hint,
   className,
   type = "text",
+  enterKeyHint,
+  onKeyDown,
+  onFocus,
   ...props
 }: InputProps) {
   const inputId = id ?? props.name;
   const isPassword = type === "password";
   const [showPassword, setShowPassword] = useState(false);
   const resolvedType = isPassword && showPassword ? "text" : type;
+  const resolvedHint =
+    enterKeyHint ??
+    (isPassword || type === "tel" || type === "search" ? "go" : "done");
 
   return (
     <label className="flex w-full flex-col gap-1.5 text-sm">
@@ -31,6 +38,7 @@ export function Input({
         <input
           id={inputId}
           type={resolvedType}
+          enterKeyHint={resolvedHint}
           className={cn(
             "h-11 w-full rounded-lg border border-[var(--line)] bg-white px-3 text-[var(--ink)]",
             "placeholder:text-[var(--muted)]",
@@ -41,6 +49,20 @@ export function Input({
           )}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? `${inputId}-error` : undefined}
+          onFocus={(e) => {
+            scrollFieldIntoView(e.currentTarget);
+            onFocus?.(e);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              const form = e.currentTarget.form;
+              if (form) {
+                e.preventDefault();
+                form.requestSubmit();
+              }
+            }
+            onKeyDown?.(e);
+          }}
           {...props}
         />
         {isPassword ? (

@@ -31,6 +31,7 @@ type WorkerStat = {
   open_pile_id: string | null;
   open_pile_sheets: number | null;
   open_pile_in_at: string | null;
+  open_on_other_job?: string | null;
 };
 
 function formatClock(iso?: string | null): string {
@@ -209,6 +210,7 @@ export function SheetsWorkClient({
           pile_count: s?.pile_count ?? 0,
           open_pile_count: s?.open_pile_count ?? 0,
           open_pile_in_at: s?.open_pile_in_at ?? null,
+          open_on_other_job: s?.open_on_other_job ?? null,
         };
       });
   }, [workers, stats]);
@@ -218,6 +220,15 @@ export function SheetsWorkClient({
 
   function openIn(worker: Worker) {
     if (readOnly) return;
+    const other = dutyRows.find((r) => r.worker.id === worker.id)
+      ?.open_on_other_job;
+    if (other) {
+      show(
+        "error",
+        `This worker already has a pile IN on ${other}. Press Out on that job first.`,
+      );
+      return;
+    }
     setActiveWorker(worker);
     setSheetChoice("");
     setCustomSheets("");
@@ -442,6 +453,7 @@ export function SheetsWorkClient({
                 pile_count,
                 open_pile_count,
                 open_pile_in_at,
+                open_on_other_job,
               }) => (
                 <tr key={worker.id}>
                   <Td className="font-medium">
@@ -449,6 +461,11 @@ export function SheetsWorkClient({
                     {open_pile_count > 0 ? (
                       <div className="text-xs text-[var(--muted)]">
                         In since {formatClock(open_pile_in_at)}
+                      </div>
+                    ) : null}
+                    {open_on_other_job ? (
+                      <div className="text-xs text-[var(--danger)]">
+                        IN on {open_on_other_job} — Out first
                       </div>
                     ) : null}
                   </Td>
@@ -470,7 +487,11 @@ export function SheetsWorkClient({
                         <Button
                           size="sm"
                           onClick={() => openIn(worker)}
-                          disabled={pending || open_pile_count > 0}
+                          disabled={
+                            pending ||
+                            open_pile_count > 0 ||
+                            Boolean(open_on_other_job)
+                          }
                         >
                           In
                         </Button>
@@ -506,12 +527,13 @@ export function SheetsWorkClient({
         open={pileOpen}
         title={`Pile In · ${activeWorker?.name ?? ""}`}
         onClose={() => setPileOpen(false)}
+        onSubmit={() => void saveIn()}
         footer={
           <>
             <Button variant="secondary" onClick={() => setPileOpen(false)}>
               Close
             </Button>
-            <Button onClick={() => void saveIn()} disabled={pending}>
+            <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "In"}
             </Button>
           </>
@@ -556,12 +578,13 @@ export function SheetsWorkClient({
         open={outOpen}
         title={`Pile Out · ${activeWorker?.name ?? ""}`}
         onClose={() => setOutOpen(false)}
+        onSubmit={() => void saveOut()}
         footer={
           <>
             <Button variant="secondary" onClick={() => setOutOpen(false)}>
               Close
             </Button>
-            <Button onClick={() => void saveOut()} disabled={pending}>
+            <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Out"}
             </Button>
           </>

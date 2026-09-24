@@ -50,7 +50,7 @@ export function JobDetailClient({
           title="Job detail"
           actions={
             <Link href={basePath}>
-              <Button variant="secondary">Previous</Button>
+              <Button variant="secondary">Back to jobs</Button>
             </Link>
           }
         />
@@ -82,17 +82,9 @@ export function JobDetailClient({
         title={job.job_name}
         description="Full job detail"
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Link href={basePath}>
-              <Button variant="secondary">Previous</Button>
-            </Link>
-            <Link href={`${basePath}/${job.id}/workers`}>
-              <Button variant="secondary">Worker</Button>
-            </Link>
-            <Link href={basePath}>
-              <Button variant="secondary">Back to jobs</Button>
-            </Link>
-          </div>
+          <Link href={basePath}>
+            <Button variant="secondary">Back to jobs</Button>
+          </Link>
         }
       />
 

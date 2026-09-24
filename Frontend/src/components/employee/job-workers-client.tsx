@@ -173,14 +173,9 @@ export function JobWorkersClient({
         title={`Workers · ${job.job_name}`}
         description={`${job.shift_name ?? "Shift"} · ${job.shift_date ?? "—"} — piles with date and time. Rows from another shift are highlighted.`}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Link href={`${basePath}/${job.id}`}>
-              <Button variant="secondary">View job</Button>
-            </Link>
-            <Link href={basePath}>
-              <Button variant="secondary">Back to jobs</Button>
-            </Link>
-          </div>
+          <Link href={basePath}>
+            <Button variant="secondary">Back to jobs</Button>
+          </Link>
         }
       />
 
@@ -292,12 +287,13 @@ export function JobWorkersClient({
         open={Boolean(editPile)}
         title="Edit sheets"
         onClose={() => setEditPile(null)}
+        onSubmit={() => void saveEdit()}
         footer={
           <>
             <Button variant="secondary" onClick={() => setEditPile(null)}>
               Cancel
             </Button>
-            <Button onClick={() => void saveEdit()} disabled={pending}>
+            <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save sheets"}
             </Button>
           </>

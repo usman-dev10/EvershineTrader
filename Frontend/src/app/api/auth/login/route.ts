@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { DEMO_SESSION_COOKIE, encodeDemoSession } from "@/lib/auth/demo";
+import {
+  DEMO_SESSION_COOKIE,
+  encodeDemoSession,
+  authenticateDemo,
+} from "@/lib/auth/demo";
 import { API_TOKEN_COOKIE } from "@/lib/auth/cookies";
 import { loginSchema } from "@/lib/validations/forms";
 import { getPublicEnv } from "@/lib/env";
@@ -58,30 +62,38 @@ export async function POST(request: Request) {
         displayName =
           role === "company" ? "Evershine Company" : "Floor Operator";
       }
-    } else if (backendRes.status === 401 || backendRes.status === 403) {
+    } else {
       const payload = await backendRes.json().catch(() => null);
-      return NextResponse.json(
-        {
-          error: {
-            code: payload?.error?.code ?? "INVALID_CREDENTIALS",
-            message:
-              payload?.error?.message ?? "Incorrect phone number or password.",
+      // If user is attempting demo account login when backend returns error/unauthorized
+      const demo = authenticateDemo(phone, password);
+      if (demo) {
+        role = demo.role;
+        apiToken = `demo-token-${demo.id}`;
+        profileId = demo.id;
+        displayName = demo.displayName;
+      } else {
+        return NextResponse.json(
+          {
+            error: {
+              code: payload?.error?.code ?? "LOGIN_FAILED",
+              message:
+                payload?.error?.message ??
+                `Backend returned status ${backendRes.status}. Please check credentials or backend setup.`,
+            },
           },
-        },
-        { status: backendRes.status },
-      );
+          { status: backendRes.status },
+        );
+      }
     }
   } catch {
-    return NextResponse.json(
-      {
-        error: {
-          code: "BACKEND_OFFLINE",
-          message:
-            "FastAPI backend is offline. Start it on port 8000, then log in again.",
-        },
-      },
-      { status: 503 },
-    );
+    // Backend unreachable / offline -> Check if credentials match demo user accounts
+    const demo = authenticateDemo(phone, password);
+    if (demo) {
+      role = demo.role;
+      apiToken = `demo-token-${demo.id}`;
+      profileId = demo.id;
+      displayName = demo.displayName;
+    }
   }
 
   if (!role || !apiToken) {
@@ -90,7 +102,7 @@ export async function POST(request: Request) {
         error: {
           code: "BACKEND_OFFLINE",
           message:
-            "Could not create API session. Start FastAPI (port 8000) and try again.",
+            "Unable to reach backend server. For demo mode, try 03001234567 / company123. For production, set NEXT_PUBLIC_API_BASE_URL in Vercel project environment variables to your hosted backend URL.",
         },
       },
       { status: 503 },

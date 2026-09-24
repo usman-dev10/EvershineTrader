@@ -14,11 +14,12 @@ class ShiftRepo:
 
     async def get_current_open(self) -> Shift | None:
         result = await self.db.execute(
-            select(Shift).where(
-                Shift.company_id == self.company_id, Shift.status == "open"
-            )
+            select(Shift)
+            .where(Shift.company_id == self.company_id, Shift.status == "open")
+            .order_by(Shift.created_at.desc())
+            .limit(1)
         )
-        return result.scalar_one_or_none()
+        return result.scalars().first()
 
     async def list_shifts(self, status: str | None = None) -> list[Shift]:
         stmt = select(Shift).where(Shift.company_id == self.company_id)
@@ -200,6 +201,19 @@ class PileRepo:
             select(JobPile)
             .where(
                 JobPile.job_id == job_id,
+                JobPile.worker_id == worker_id,
+                JobPile.company_id == self.company_id,
+                JobPile.pile_out_at.is_(None),
+            )
+            .order_by(JobPile.created_at.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def get_any_open_for_worker(self, worker_id: UUID) -> JobPile | None:
+        result = await self.db.execute(
+            select(JobPile)
+            .where(
                 JobPile.worker_id == worker_id,
                 JobPile.company_id == self.company_id,
                 JobPile.pile_out_at.is_(None),

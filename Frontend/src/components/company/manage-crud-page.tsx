@@ -165,6 +165,7 @@ export function ManageCrudPage({
           setMode(null);
           setEditId(null);
         }}
+        onSubmit={submit}
         footer={
           <>
             <Button
@@ -176,7 +177,7 @@ export function ManageCrudPage({
             >
               Cancel
             </Button>
-            <Button onClick={submit} disabled={pending}>
+            <Button type="submit" disabled={pending}>
               {pending ? "Saving…" : "Save"}
             </Button>
           </>

@@ -22,7 +22,10 @@ export function safeErrorMessage(
     SHIFT_CLOSED: "This shift is closed. New records cannot be added.",
     SHEET_LIMIT_EXCEEDED: "Cannot add this pile. Not enough sheets remain for this job.",
     WORKER_NOT_ON_DUTY: "This worker is not on duty for the current shift.",
-    DUPLICATE_JOB_NUMBER: "A job with this number already exists.",
+    DUPLICATE_JOB_NUMBER: "This job number is already used on this shift.",
+    PILE_STILL_IN: "Cannot close shift while a worker still has a pile IN.",
+    PILE_ALREADY_OPEN:
+      "This worker already has a pile IN. Press Out first.",
     VALIDATION_ERROR: "Please complete all required fields.",
   };
 
